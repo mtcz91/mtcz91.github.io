@@ -1,0 +1,504 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>https://mtcz91.github.com</id>
+    <title>Gridea</title>
+    <updated>2024-06-26T18:11:33.231Z</updated>
+    <generator>https://github.com/jpmonette/feed</generator>
+    <link rel="alternate" href="https://mtcz91.github.com"/>
+    <link rel="self" href="https://mtcz91.github.com/atom.xml"/>
+    <subtitle>温故而知新</subtitle>
+    <logo>https://mtcz91.github.com/images/avatar.png</logo>
+    <icon>https://mtcz91.github.com/favicon.ico</icon>
+    <rights>All rights reserved 2024, Gridea</rights>
+    <entry>
+        <title type="html"><![CDATA[hello]]></title>
+        <id>https://mtcz91.github.com/post/hello/</id>
+        <link href="https://mtcz91.github.com/post/hello/">
+        </link>
+        <updated>2024-06-26T18:10:12.000Z</updated>
+        <summary type="html"><![CDATA[<p>👏  欢迎使用 <strong>Gridea</strong> ！<br>
+✍️  <strong>Gridea</strong> 一个静态博客写作客户端。你可以用它来记录你的生活、心情、知识、笔记、创意... ...</p>
+]]></summary>
+        <content type="html"><![CDATA[<p>👏  欢迎使用 <strong>Gridea</strong> ！<br>
+✍️  <strong>Gridea</strong> 一个静态博客写作客户端。你可以用它来记录你的生活、心情、知识、笔记、创意... ...</p>
+<!-- more -->
+<p><a href="https://github.com/getgridea/gridea">Github</a><br>
+<a href="https://gridea.dev/">Gridea 主页</a><br>
+<a href="https://fehey.com/">示例网站</a></p>
+<h2 id="特性">特性👇</h2>
+<p>📝  你可以使用最酷的 <strong>Markdown</strong> 语法，进行快速创作</p>
+<p>🌉  你可以给文章配上精美的封面图和在文章任意位置插入图片</p>
+<p>🏷️  你可以对文章进行标签分组</p>
+<p>📋  你可以自定义菜单，甚至可以创建外部链接菜单</p>
+<p>💻  你可以在 <strong>Windows</strong>，<strong>MacOS</strong> 或 <strong>Linux</strong> 设备上使用此客户端</p>
+<p>🌎  你可以使用 <strong>𝖦𝗂𝗍𝗁𝗎𝖻 𝖯𝖺𝗀𝖾𝗌</strong> 或 <strong>Coding Pages</strong> 向世界展示，未来将支持更多平台</p>
+<p>💬  你可以进行简单的配置，接入 <a href="https://github.com/gitalk/gitalk">Gitalk</a> 或 <a href="https://github.com/SukkaW/DisqusJS">DisqusJS</a> 评论系统</p>
+<p>🇬🇧  你可以使用<strong>中文简体</strong>或<strong>英语</strong></p>
+<p>🌁  你可以任意使用应用内默认主题或任意第三方主题，强大的主题自定义能力</p>
+<p>🖥  你可以自定义源文件夹，利用 OneDrive、百度网盘、iCloud、Dropbox 等进行多设备同步</p>
+<p>🌱 当然 <strong>Gridea</strong> 还很年轻，有很多不足，但请相信，它会不停向前 🏃</p>
+<p>未来，它一定会成为你离不开的伙伴</p>
+<p>尽情发挥你的才华吧！</p>
+<p>😘 Enjoy~</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[模板渲染与表达式执行]]></title>
+        <id>https://mtcz91.github.com/post/hello-test/</id>
+        <link href="https://mtcz91.github.com/post/hello-test/">
+        </link>
+        <updated>2024-06-26T17:46:39.000Z</updated>
+        <summary type="html"><![CDATA[<p>模板渲染与表达式执行</p>
+<h1 id="观点回顾">观点回顾</h1>
+<p>我们重新回顾下，我从课程开始到现在一直强调的代码审计的通行方法论（3句话），然后再看如何将其与今天的课程结合。</p>
+]]></summary>
+        <content type="html"><![CDATA[<p>模板渲染与表达式执行</p>
+<h1 id="观点回顾">观点回顾</h1>
+<p>我们重新回顾下，我从课程开始到现在一直强调的代码审计的通行方法论（3句话），然后再看如何将其与今天的课程结合。</p>
+<!-- more -->
+<pre><code>仅仅抓住输入
+当数据流入侵到控制流时，漏洞就产生了
+“数据流入侵控制流”产生的风险点，往往在于不同数据平面的交汇处——不同数据平面的交汇处，往往是漏洞产生的地方
+</code></pre>
+<h1 id="模板渲染">模板渲染</h1>
+<h2 id="模板渲染是什么">模板渲染是什么</h2>
+<p>模板在web系统中一般指的是一套html代码文件/字符串了，渲染是前后端分离的代码开发模式中经常用到的一个词。说白了，渲染的过程就是一个<strong>后端变量</strong>通过渲染引擎绑定到<strong>前端变量</strong>的过程。</p>
+<pre><code>后端：运行在服务器/web中间件上的代码(golang/php/java/python/nodejs)
+前端：运行在浏览器的代码（js/html/css）
+</code></pre>
+<p>有了模板渲染，<strong>就可以将前后端分离开</strong>。一般一个产品代码的开发，会有一套程序员班子，然后他们之间也有分工，有专门写前端的前端程序员、有专门写后端的后端程序员。这个时候，要进行同步协作开发，就要使用到模板渲染。</p>
+<h3 id="传统协作开发流程">传统协作开发流程</h3>
+<p>1.前端程序员开发自己的代码，并与后端程序员协商好变量名称、变量类型、传输方式等等。然后在相应位置放置变量。同时将前端代码交付给后端程序员。</p>
+<p>2.对于后端程序员而言，前端交付的代码就叫做<strong>模板</strong>，后端程序员在后端代码中引入模板，并绑定<strong>变量</strong>（从数据库取出、从用户输入获取、从计算逻辑得到）</p>
+<p>3.绑定变量的结果，就是一个可以返回给浏览器的html了，然后将这个html发送响应，这就是整个<strong>传统mvc</strong>的协作流程。</p>
+<h3 id="现代mvc协作开发流程">现代mvc协作开发流程</h3>
+<p>大家是否发现了，在上面的传统开发流程里面，其实有一个特别废io的操作。</p>
+<p>就是最后一步，要将<strong>整个</strong>html当成响应发送给前端浏览器。</p>
+<figure data-type="image" tabindex="1"><img src="https://imgurl-1304573507.cos.ap-shanghai.myqcloud.com/image-20221203121500389.png" alt="image-20221203121500389" loading="lazy"></figure>
+<p>我随便开了个网站给大家举例哈。</p>
+<pre><code>&lt;html&gt;
+&lt;head&gt;
+&lt;title&gt;电影网&lt;/title&gt;
+&lt;script&gt;
+...
+...
+...
+&lt;/script&gt;
+&lt;/head&gt;
+&lt;body&gt;
+...
+...
+&lt;video src=&quot;A1&quot;&gt;
+&lt;video src=&quot;A2&quot;&gt;
+&lt;video src=&quot;A3&quot;&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>如果有一个翻页功能，那么用传统的mvc这种后端的模板渲染引擎来渲染的方式，那么就会造成两个影响：</p>
+<ol>
+<li>对后端服务器的性能有损耗</li>
+<li>要传输一整个html，网络数据量大，消耗大</li>
+</ol>
+<p>所以现在的流程一般是这样的：</p>
+<p>1.前端程序员与后端程序员协商好变量名称、变量类型、传输方式（ajax获取api）等等。并且不需要交付任何代码给后端。</p>
+<p>2.对于后端程序员而言，需要做的就是在开发过程中依照约定写api，api的功能就是依照访问时输入的参数，返回一个json字符串。</p>
+<p>3.前端程序员书写前端代码，依照约定好的api获取资源的内容，并通过js进行前端渲染，json字符串中的内容渲染到浏览器上</p>
+<p>与之对应的，现代mvc将<strong>模板渲染</strong>的工作转移到了浏览器前端，那么依然可能产生漏洞，即在客户端的模板注入（Client-Side Template Injection）CSTI，但是为什么没有人提呢？因为攻击性太小了，最多是个xss的子类而已，我们连XSS都不愿意去审，更何况CSTI呢。</p>
+<h2 id="风险点">风险点</h2>
+<p>在传统mvc模式下，所有的模板渲染在服务器后端进行，并且此时我们知道，模板渲染时，很有可能引入我们的<strong>输入</strong>。那么如果程序员在开发的时候，对输入的处理不好，直接将输入引入了模板，就会造成模板注入漏洞。</p>
+<h1 id="ssti">SSTI</h1>
+<h2 id="说明">说明</h2>
+<p>SSTI 就是服务器端模板注入（Server-Side Template Injection）</p>
+<p>漏洞成因就是服务端接收了用户的恶意输入以后，未经任何处理就将其作为 Web 应用模板内容的一部分，模板引擎在进行目标编译渲染的过程中，执行了用户插入的可以破坏模板的语句，因而可能导致了敏感信息泄露、代码执行、GetShell 等问题。<strong>SSTI影响范围主要取决于模版引擎是什么</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>Engine</th>
+<th>Remote Command Execution</th>
+<th>Blind</th>
+<th>Code evaluation</th>
+<th>File read</th>
+<th>File write</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mako</td>
+<td>✓</td>
+<td>✓</td>
+<td>Python</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Jinja2</td>
+<td>✓</td>
+<td>✓</td>
+<td>Python</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Python (code eval)</td>
+<td>✓</td>
+<td>✓</td>
+<td>Python</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Tornado</td>
+<td>✓</td>
+<td>✓</td>
+<td>Python</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Nunjucks</td>
+<td>✓</td>
+<td>✓</td>
+<td>JavaScript</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Pug</td>
+<td>✓</td>
+<td>✓</td>
+<td>JavaScript</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>doT</td>
+<td>✓</td>
+<td>✓</td>
+<td>JavaScript</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Marko</td>
+<td>✓</td>
+<td>✓</td>
+<td>JavaScript</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>JavaScript (code eval)</td>
+<td>✓</td>
+<td>✓</td>
+<td>JavaScript</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Dust (&lt;= dustjs-helpers@1.5.0)</td>
+<td>✓</td>
+<td>✓</td>
+<td>JavaScript</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>EJS</td>
+<td>✓</td>
+<td>✓</td>
+<td>JavaScript</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Ruby (code eval)</td>
+<td>✓</td>
+<td>✓</td>
+<td>Ruby</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Slim</td>
+<td>✓</td>
+<td>✓</td>
+<td>Ruby</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>ERB</td>
+<td>✓</td>
+<td>✓</td>
+<td>Ruby</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Smarty (unsecured)</td>
+<td>✓</td>
+<td>✓</td>
+<td>PHP</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>PHP (code eval)</td>
+<td>✓</td>
+<td>✓</td>
+<td>PHP</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Twig (&lt;=1.19)</td>
+<td>✓</td>
+<td>✓</td>
+<td>PHP</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Freemarker</td>
+<td>✓</td>
+<td>✓</td>
+<td>Java</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Velocity</td>
+<td>✓</td>
+<td>✓</td>
+<td>Java</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>Twig (&gt;1.19)</td>
+<td>×</td>
+<td>×</td>
+<td>×</td>
+<td>×</td>
+<td>×</td>
+</tr>
+<tr>
+<td>Smarty (secured)</td>
+<td>×</td>
+<td>×</td>
+<td>×</td>
+<td>×</td>
+<td>×</td>
+</tr>
+<tr>
+<td>Dust (&gt; dustjs-helpers@1.5.0)</td>
+<td>×</td>
+<td>×</td>
+<td>×</td>
+<td>×</td>
+<td>×</td>
+</tr>
+</tbody>
+</table>
+<p><a href="https://github.com/epinna/tplmap">tplmap</a></p>
+<h2 id="代码原型">代码原型</h2>
+<h3 id="php">php</h3>
+<p>Twig是php的一套模板渲染的组件，但是不规范的渲染参数输入方式，可能导致模板注入。</p>
+<p>我们先思考下这里应该怎么写才对。</p>
+<pre><code class="language-php">&lt;?php
+　　require_once dirname(__FILE__).'\twig\lib\Twig\Autoloader.php';
+　　Twig_Autoloader::register(true);
+　　$twig = new Twig_Environment(new Twig_Loader_String());
+　　$output = $twig-&gt;render(&quot;Hello {{name}}&quot;,array(&quot;name&quot; =&gt; $_GET[&quot;name&quot;]));  // 将用户输入作为模版变量的值
+　　echo $output;
+?&gt;
+</code></pre>
+<p>我们来看看输入流转：</p>
+<pre><code>输入--&gt;php字符串变量$_GET[&quot;name&quot;]--&gt;Twig模板渲染--&gt;发现变量{{name}}--&gt;找到变量name的绑定--&gt;解析字符串--&gt;渲染展示
+</code></pre>
+<p>再看看错误的写法。</p>
+<pre><code class="language-php">&lt;?php
+　　require_once dirname(__FILE__).'/../lib/Twig/Autoloader.php';
+　　Twig_Autoloader::register(true);
+　　$twig=newTwig_Environment(newTwig_Loader_String());
+　　$output=$twig-&gt;render(&quot;Hello {$_GET['name']}&quot;);// 将用户输入作为模版内容的一部分
+　　echo $output;?&gt;
+</code></pre>
+<p>再看看输入流转：</p>
+<pre><code>输入--&gt;php字符串变量$_GET[&quot;name&quot;]--&gt;拼接字符串&quot;Hello {$_GET['name']}&quot;作为新变量--&gt;Twig模板渲染--&gt;渲染展示
+</code></pre>
+<p>这样就可以进行攻击输入了</p>
+<pre><code>{{_self.env.registerUndefinedFilterCallback(&quot;exec&quot;)}}{{_self.env.getFilter(&quot;id&quot;)}}
+</code></pre>
+<p>SSTI的利用内容来自于<a href="https://www.cnblogs.com/bmjoker/p/13508538.html">参考</a>。</p>
+<p><strong>我们在代码层（php）的输入，导致了Twig模板层的数据流入侵到了控制流</strong></p>
+<h3 id="python">python</h3>
+<pre><code class="language-python">from flask import Flask, render_template_string, request
+
+app = Flask(__name__)
+
+
+@app.route('/')
+def index():
+    name = request.args.get('name')
+    html = '''&lt;h3&gt;hello,%s&lt;/h3&gt;''' % name
+    return render_template_string(html)
+
+
+@app.route('/right')
+def right():
+    name = request.args.get('name')
+    html = '''&lt;h3&gt;hello,{{name}}&lt;/h3&gt;'''
+    return render_template_string(html, name=name)
+
+
+if __name__ == '__main__':
+    app.run(host='127.0.0.1', port=9000)
+
+</code></pre>
+<p>看看合理的输入流转：</p>
+<pre><code>输入--&gt;python字符串变量name--&gt;jinja2模板渲染--&gt;发现变量{{name}}--&gt;找到变量name的绑定--&gt;解析字符串name--&gt;渲染展示
+</code></pre>
+<p>错误的输入流转</p>
+<pre><code>输入--&gt;python字符串变量name--&gt;拼接字符串&quot;&lt;h3&gt;hello,&lt;/h3&gt;&quot;与name作为新变量--&gt;jinja2模板渲染--&gt;渲染展示
+</code></pre>
+<p>另外实际上有一点需要强调的是，在多数情况下，flask里面不会直接使用render_template_string来做渲染，因为这样就造成了<strong>前后端代码的杂糅</strong>了。</p>
+<p>一般而言，用的比较多的是render_template函数</p>
+<p>比如这个案例</p>
+<p>https://blog.csdn.net/weixin_53146913/article/details/124274968</p>
+<figure data-type="image" tabindex="2"><img src="https://imgurl-1304573507.cos.ap-shanghai.myqcloud.com/image-20221203143055649.png" alt="image-20221203143055649" loading="lazy"></figure>
+<figure data-type="image" tabindex="3"><img src="https://imgurl-1304573507.cos.ap-shanghai.myqcloud.com/image-20221203143105664.png" alt="image-20221203143105664" loading="lazy"></figure>
+<h2 id="总结">总结</h2>
+<p>一个一招鲜吃遍天的办法：</p>
+<pre><code>SSTI的代码审计，就是看我们的输入进入解析引擎的方式。
+如果是先被后端代码以拼接或者其他字符串处理的方式处理后，直接放入模板引擎，那么大概率存在ssti。
+如果“模板文本”已经进入了解析引擎，然后再通过变量绑定的方式来获取我们的输入，那么大概率不存在ssti。
+</code></pre>
+<h1 id="ssti攻击与表达式执行的利用">SSTI攻击与表达式执行的利用</h1>
+<p>我们刚才，其实已经用到了表达式了，表达式由操作符合操作数组成。</p>
+<figure data-type="image" tabindex="4"><img src="https://imgurl-1304573507.cos.ap-shanghai.myqcloud.com/image-20221203150329051.png" alt="image-20221203150329051" loading="lazy"></figure>
+<h2 id="代码注入">代码注入？</h2>
+<p><strong>我们的输入变成了jinja2的代码，我们可以书写jinja2的代码了</strong>。</p>
+<p>SSTI攻击，更有意思的部分就在这里，我们需要自己去书写，符合模板渲染引擎要求的语法，去执行敏感操作（可以理解为这里就是代码注入了，只是必须注入模板引擎的代码）。下面，我主要以jinja2为例，来传授大家，如何去书写我们的攻击payload</p>
+<h2 id="python基础">python基础</h2>
+<p>我们知道，在python里面，一切皆对象(<strong>并且object类是所有类的基类</strong>)。我们之前在讲反序列化那章里面有提到，魔术方法，这是面对对象中很重要的一个概念。所以python中自然也会有。</p>
+<p>并且python中有许多自带的魔术方法，比如：</p>
+<pre><code>__class__  ✅
+  查看对象所在的类
+__mro__    ✅
+  查看继承关系和调用顺序，返回元组
+__base__   ✅
+  返回基类
+__bases__  ✅
+  返回基类元组
+__subclasses__()   ✅
+  返回子类列表
+__init__     ✅
+  调用初始化函数，可以用来跳到__globals__
+__globals__   ✅
+  返回函数所在的全局命名空间所定义的全局变量，返回字典
+__builtins__
+  返回内建内建名称空间字典
+__dic__
+  返回类的静态函数、类函数、普通函数、全局变量以及一些内置的属性
+__getattribute__()
+  实例、类、函数都具有的魔术方法。事实上，在实例化的对象进行.操作的时候（形如:a.xxx/a.xxx() 都会自动去调用此方法。因此我们同样可以直接通过这个方法来获取到实例、类、函数的属性。
+__getitem__()
+  调用字典中的键值，其实就是调用这个魔术方法，比如a['b']，就是a.__getitem__('b')
+__builtins__
+  内建名称空间，内建名称空间有许多名字到对象之间映射，而这些名字其实就是内建函数的名称，对象就是这些内建函数本身。即里面有很多常用的函数。__builtins__与__builtin__的区别就不放了，百度都有。
+__import__
+  动态加载类和函数，也就是导入模块，经常用于导入os模块，__import__('os').popen('ls').read()]
+__str__()
+  返回描写这个对象的字符串，可以理解成就是打印出来。
+</code></pre>
+<h2 id="如何开始ssti">如何开始SSTI</h2>
+<h3 id="1了解语法">1.了解语法</h3>
+<p>https://blog.csdn.net/qq_38154820/article/details/111399386</p>
+<pre><code>{% ... %} for Statements
+{{ ... }} for Expressions to print to the template output
+{# ... #} for Comments not included in the template output
+#  ... ## for Line Statements
+</code></pre>
+<h3 id="2了解可用的魔术方法">2.了解可用的魔术方法</h3>
+<p>魔术方法来自于语言本身，当然有的渲染引擎，也会内置一些特殊的函数，所以也可以理解为魔术方法。比如Twig，该引擎有一个内置变量_self，这个_self对象暴露了Twig内部许多API，这些API中就有可以用来执行php原生代码的，导致最终的利用。（相当于从Twig层调回了php层）</p>
+<p>以jinja2为例，jinja2是python下的解析引擎，并且该引擎默认是不会将环境与python隔离开的，也就是python下对象可以用的方法，会蔓延到jinja2中。比如</p>
+<pre><code>{{&quot;aasdasd&quot;.replace(&quot;a&quot;,&quot;b&quot;)}}
+</code></pre>
+<figure data-type="image" tabindex="5"><img src="https://imgurl-1304573507.cos.ap-shanghai.myqcloud.com/image-20221203152735460.png" alt="image-20221203152735460" loading="lazy"></figure>
+<p>但是我们能用的东西似乎不多？数一下</p>
+<pre><code>数字
+字符串 &quot;&quot;
+数组 []
+操作符
+jinja2语法的流程控制（for、if等等）{%%}
+jinja2内置的对象：
+	config	获取当前的flask设置
+	self	当前的模板对象
+	
+</code></pre>
+<p>其实还有，jinja2每次渲染的时候，会创建一个上下文,这个上下文里面，标识了此时能用的全局对象</p>
+<figure data-type="image" tabindex="6"><img src="https://imgurl-1304573507.cos.ap-shanghai.myqcloud.com/image-20221203160237793.png" alt="image-20221203160237793" loading="lazy"></figure>
+<p>另外最重要的其实还是魔术方法，因为我们想执行的是python下的内置函数。</p>
+<h3 id="3构造流程">3.构造流程</h3>
+<p>思考：我想执行os.system，怎么用python面对对象的思维来思考？</p>
+<pre><code>os.system其实就是os类的system方法
+os类必然是object类的子类
+--》
+&quot;dada&quot;是str类的一个对象
+str类是object类的子类
+==》
+通过&quot;dada&quot;.__class__找到str类
+通过str.__base__找到object类
+通过object.__subclasses__()[x]找到任意一个类
+通过object.__subclasses__[133].__init__方法进行初始化得到一个os对象
+通过object.__subclasses__[x].__init__.__globals__  可以获取到方法内以字典的形式返回的方法、属性等值
+通过object.__subclasses__[x].__init__.__globals__.['system']调用os对象的system方法
+
+</code></pre>
+<p>于是我们的payload就出来了</p>
+<pre><code>&quot;&quot;.__class__.__base__.__subclasses__()[133].__init__.__globals__['system']('whoami')
+
+</code></pre>
+<h2 id="参考">参考</h2>
+<p>https://www.cnblogs.com/bmjoker/p/13508538.html</p>
+<p>https://blog.csdn.net/qq_38154820/article/details/111399386</p>
+<p>https://blog.csdn.net/weixin_61956136/article/details/126076747</p>
+<p>https://blog.csdn.net/soldi_er/article/details/116293934</p>
+<p>http://www.itfaba.com/jishufenxian/45239.html</p>
+<!-- more -->
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Hello Gridea]]></title>
+        <id>https://mtcz91.github.com/post/hello-gridea/</id>
+        <link href="https://mtcz91.github.com/post/hello-gridea/">
+        </link>
+        <updated>2018-12-11T16:00:00.000Z</updated>
+        <summary type="html"><![CDATA[<p>👏  欢迎使用 <strong>Gridea</strong> ！<br>
+✍️  <strong>Gridea</strong> 一个静态博客写作客户端。你可以用它来记录你的生活、心情、知识、笔记、创意... ...</p>
+]]></summary>
+        <content type="html"><![CDATA[<p>👏  欢迎使用 <strong>Gridea</strong> ！<br>
+✍️  <strong>Gridea</strong> 一个静态博客写作客户端。你可以用它来记录你的生活、心情、知识、笔记、创意... ...</p>
+<!-- more -->
+<p><a href="https://github.com/getgridea/gridea">Github</a><br>
+<a href="https://gridea.dev/">Gridea 主页</a><br>
+<a href="https://fehey.com/">示例网站</a></p>
+<h2 id="特性">特性👇</h2>
+<p>📝  你可以使用最酷的 <strong>Markdown</strong> 语法，进行快速创作</p>
+<p>🌉  你可以给文章配上精美的封面图和在文章任意位置插入图片</p>
+<p>🏷️  你可以对文章进行标签分组</p>
+<p>📋  你可以自定义菜单，甚至可以创建外部链接菜单</p>
+<p>💻  你可以在 <strong>Windows</strong>，<strong>MacOS</strong> 或 <strong>Linux</strong> 设备上使用此客户端</p>
+<p>🌎  你可以使用 <strong>𝖦𝗂𝗍𝗁𝗎𝖻 𝖯𝖺𝗀𝖾𝗌</strong> 或 <strong>Coding Pages</strong> 向世界展示，未来将支持更多平台</p>
+<p>💬  你可以进行简单的配置，接入 <a href="https://github.com/gitalk/gitalk">Gitalk</a> 或 <a href="https://github.com/SukkaW/DisqusJS">DisqusJS</a> 评论系统</p>
+<p>🇬🇧  你可以使用<strong>中文简体</strong>或<strong>英语</strong></p>
+<p>🌁  你可以任意使用应用内默认主题或任意第三方主题，强大的主题自定义能力</p>
+<p>🖥  你可以自定义源文件夹，利用 OneDrive、百度网盘、iCloud、Dropbox 等进行多设备同步</p>
+<p>🌱 当然 <strong>Gridea</strong> 还很年轻，有很多不足，但请相信，它会不停向前 🏃</p>
+<p>未来，它一定会成为你离不开的伙伴</p>
+<p>尽情发挥你的才华吧！</p>
+<p>😘 Enjoy~</p>
+]]></content>
+    </entry>
+</feed>
